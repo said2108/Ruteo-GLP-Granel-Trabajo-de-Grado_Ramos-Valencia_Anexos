@@ -1,0 +1,311 @@
+{#
+  © 2026 Valentina Ramos Muñoz y Sofía Valentina Valencia López. Todos los derechos reservados.
+  Universidad del Valle, Ingeniería Industrial, Palmira. Se prohíbe su reproducción, distribución o uso comercial sin autorización de las autoras.
+#}
+{% extends 'base.html' %}
+{% block title %}Resultados — Ruteo GLP · Fórmula{% endblock %}
+
+{% block head %}
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    #mapa { height: 480px; border-radius: .5rem; }
+
+    .stat-card .stat-value { font-size: 1.5rem; font-weight: 700; }
+    .stat-card .stat-label { font-size: .8rem; color: #6c757d; text-transform: uppercase; letter-spacing: .05em; }
+
+    .ruta-header-v1 { border-left: 4px solid #0d6efd; }
+    .ruta-header-v2 { border-left: 4px solid #f97316; }
+
+    .badge-planta { background-color: #dc3545; }
+
+    .tabla-ruta thead { font-size: .85rem; }
+    .tabla-ruta td   { vertical-align: middle; }
+
+    .paso-dot {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 1.5rem; height: 1.5rem; border-radius: 50%;
+      font-size: .75rem; font-weight: 700; color: #fff;
+    }
+    .dot-v1      { background-color: #0d6efd; }
+    .dot-v2      { background-color: #f97316; }
+    .dot-planta  { background-color: #dc3545; }
+  </style>
+{% endblock %}
+
+
+{% block content %}
+
+<!-- ── Encabezado ────────────────────────────────────────────── -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="mb-0">Resultados de optimización</h4>
+    <small class="text-muted">Estado: <strong class="text-success">{{ resultado.estado }}</strong></small>
+  </div>
+</div>
+
+<!-- ── Cards de costos totales ──────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card stat-card text-center py-3">
+      <div class="stat-label mb-1"><i class="bi bi-fuel-pump me-1"></i>Costo combustible</div>
+      <div class="stat-value text-primary">${{ '{:,.0f}'.format(resultado.costo_combustible) }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card stat-card text-center py-3">
+      <div class="stat-label mb-1"><i class="bi bi-sign-stop me-1"></i>Costo peajes</div>
+      <div class="stat-value text-warning">${{ '{:,.0f}'.format(resultado.costo_peajes) }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card stat-card text-center py-3 border-success">
+      <div class="stat-label mb-1"><i class="bi bi-cash-stack me-1"></i>Costo total</div>
+      <div class="stat-value text-success">${{ '{:,.0f}'.format(resultado.costo_total) }}</div>
+    </div>
+  </div>
+</div>
+
+{% if uso_capacidad %}
+<div class="card mb-4">
+  <div class="card-header bg-white fw-semibold">
+    <i class="bi bi-speedometer2 me-2"></i>Uso de capacidad por vehículo
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      {% for uso in uso_capacidad %}
+      <div class="col-md-6">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <span class="fw-semibold">Vehículo {{ uso.id }} — {{ uso.nombre }}</span>
+          <span class="fw-bold">{{ uso.porcentaje }}%</span>
+        </div>
+        <div class="progress mb-1" role="progressbar" aria-valuenow="{{ uso.porcentaje }}" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-bar {{ 'bg-primary' if uso.id == 1 else 'bg-warning' }}"
+               style="width: {{ [uso.porcentaje, 100] | min }}%"></div>
+        </div>
+        <div class="small text-muted">
+          {{ '{:,}'.format(uso.carga) }} kg de {{ '{:,}'.format(uso.capacidad) }} kg
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Rutas por vehículo ────────────────────────────────────── -->
+{% for vid, ruta in resultado.rutas.items() %}
+{% set color_class = 'ruta-header-v1' if loop.index == 1 else 'ruta-header-v2' %}
+{% set dot_class   = 'dot-v1'         if loop.index == 1 else 'dot-v2' %}
+{% set badge_color = 'primary'        if loop.index == 1 else 'warning' %}
+{% set v_label     = 'Grande'         if loop.index == 1 else 'Pequeño' %}
+
+<div class="card mb-4">
+  <div class="card-header {{ color_class }} bg-white d-flex justify-content-between align-items-center py-3">
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-truck-front-fill fs-5 text-{{ badge_color }}"></i>
+      <span class="fw-semibold fs-5">Vehículo {{ vid }} — {{ v_label }}</span>
+      <span class="badge bg-{{ badge_color }} text-{{ 'dark' if badge_color == 'warning' else 'white' }}">
+        {{ ruta.paradas | length - 2 }} cliente(s)
+      </span>
+    </div>
+    <!-- Métricas rápidas del vehículo -->
+    <div class="d-flex gap-3 text-center d-none d-md-flex">
+      <div>
+        <div class="small text-muted">Carga</div>
+        <div class="fw-semibold">{{ '{:,}'.format(ruta.carga_total) }} kg</div>
+      </div>
+      <div>
+        <div class="small text-muted">Distancia</div>
+        <div class="fw-semibold">{{ ruta.distancia_km }} km</div>
+      </div>
+      <div>
+        <div class="small text-muted">Combustible</div>
+        <div class="fw-semibold">${{ '{:,.0f}'.format(ruta.costo_combustible) }}</div>
+      </div>
+      <div>
+        <div class="small text-muted">Peajes</div>
+        <div class="fw-semibold">${{ '{:,.0f}'.format(ruta.costo_peajes) }}</div>
+      </div>
+      <div>
+        <div class="small text-muted fw-bold">Total ruta</div>
+        <div class="fw-bold text-{{ badge_color if badge_color != 'warning' else 'dark' }}">
+          ${{ '{:,.0f}'.format(ruta.costo_total) }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-body p-0">
+    <table class="table tabla-ruta table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th style="width:3rem" class="text-center">Paso</th>
+          <th>Nombre</th>
+          <th>Ciudad</th>
+          <th class="text-end">Demanda (kg)</th>
+          <th class="text-end">Acumulado (kg)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set acumulado = namespace(val=0) %}
+        {% for parada in ruta.paradas %}
+        {% set es_planta = parada.nodo == 'Planta' %}
+        {% if not es_planta %}
+          {% set acumulado.val = acumulado.val + parada.demanda %}
+        {% endif %}
+        <tr class="{{ 'table-light' if es_planta else '' }}">
+          <td class="text-center">
+            <span class="paso-dot {{ 'dot-planta' if es_planta else dot_class }}">
+              {{ loop.index0 }}
+            </span>
+          </td>
+          <td>
+            {% if es_planta %}
+              <span class="badge badge-planta">PLANTA</span>
+              <span class="ms-1 text-muted">{{ parada.ciudad }}</span>
+            {% else %}
+              <span class="fw-semibold">{{ parada.nombre }}</span>
+            {% endif %}
+          </td>
+          <td>{{ '' if es_planta else parada.ciudad }}</td>
+          <td class="text-end">{{ '' if es_planta else parada.demanda }}</td>
+          <td class="text-end fw-semibold">
+            {{ '' if es_planta else acumulado.val }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+<!-- ── Mapa ──────────────────────────────────────────────────── -->
+<div class="card mb-4">
+  <div class="card-header bg-dark text-white d-flex align-items-center gap-2">
+    <i class="bi bi-map-fill"></i>
+    <span class="fw-semibold">Mapa de rutas</span>
+    <!-- Leyenda -->
+    <div class="ms-auto d-flex gap-3 small">
+      {% for vid, ruta in resultado.rutas.items() %}
+      <span>
+        <span style="display:inline-block;width:14px;height:14px;border-radius:50%;
+                     background:{{ '#0d6efd' if loop.index==1 else '#f97316' }};
+                     vertical-align:middle;margin-right:4px"></span>
+        Vehículo {{ vid }}
+      </span>
+      {% endfor %}
+      <span>
+        <span style="display:inline-block;width:14px;height:14px;border-radius:50%;
+                     background:#dc3545;vertical-align:middle;margin-right:4px"></span>
+        Planta
+      </span>
+    </div>
+  </div>
+  <div class="card-body p-2">
+    <div id="mapa"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+
+{% block scripts %}
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Datos de rutas desde el servidor ─────────────────────────
+const RUTAS   = {{ resultado.rutas | tojson }};
+const COLORES = { "1": "#0d6efd", "2": "#f97316" };
+
+// ── Inicializar mapa ──────────────────────────────────────────
+const map = L.map('mapa');
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 18,
+}).addTo(map);
+
+// ── Icono estrella para la planta ─────────────────────────────
+const iconoPlanta = L.divIcon({
+  html: '<i class="bi bi-star-fill" style="color:#dc3545;font-size:1.4rem;filter:drop-shadow(0 0 3px rgba(0,0,0,.5))"></i>',
+  className: '',
+  iconAnchor: [10, 10],
+  popupAnchor: [0, -12],
+});
+
+// ── Dibujar rutas ─────────────────────────────────────────────
+const bounds = [];
+
+for (const [vid, ruta] of Object.entries(RUTAS)) {
+  const color    = COLORES[vid] ?? '#333';
+  const latlngs  = ruta.paradas.map(p => [p.lat, p.lon]);
+
+  // Línea de la ruta con flechas direccionales
+  const polyline = L.polyline(latlngs, {
+    color,
+    weight: 3.5,
+    opacity: 0.85,
+  }).addTo(map);
+
+  // Flechas de dirección (decorador simple con puntos medios)
+  latlngs.forEach(ll => bounds.push(ll));
+
+  // Marcadores por parada
+  ruta.paradas.forEach((p, i) => {
+    const esPlanta = p.nodo === 'Planta';
+
+    if (esPlanta) {
+      // Solo agregar marcador de planta una vez (en el primer vehículo)
+      if (vid === Object.keys(RUTAS)[0] || i > 0) {
+        L.marker([p.lat, p.lon], { icon: iconoPlanta })
+          .bindPopup(`<strong>PLANTA — ${p.ciudad}</strong><br>Punto de origen y retorno`)
+          .addTo(map);
+      }
+    } else {
+      const marker = L.circleMarker([p.lat, p.lon], {
+        radius:      8,
+        fillColor:   color,
+        color:       '#fff',
+        weight:      2,
+        fillOpacity: 0.9,
+      });
+
+      marker.bindPopup(`
+        <div style="min-width:180px">
+          <div class="fw-semibold">${p.nombre}</div>
+          <div class="text-muted small">${p.ciudad}</div>
+          <hr class="my-1">
+          <div><strong>Demanda:</strong> ${p.demanda} kg</div>
+          <div><strong>Vehículo:</strong> ${vid}</div>
+          <div><strong>Paso:</strong> ${i}</div>
+        </div>
+      `);
+
+      marker.addTo(map);
+
+      // Etiqueta con número de paso
+      L.marker([p.lat, p.lon], {
+        icon: L.divIcon({
+          html: `<span style="
+            background:${color};color:#fff;border-radius:50%;
+            width:18px;height:18px;display:flex;align-items:center;
+            justify-content:center;font-size:10px;font-weight:700;
+            border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3)">${i}</span>`,
+          className: '',
+          iconAnchor: [9, 9],
+        }),
+        interactive: false,
+        zIndexOffset: 500,
+      }).addTo(map);
+    }
+  });
+}
+
+// ── Ajustar vista al contenido ────────────────────────────────
+if (bounds.length > 0) {
+  map.fitBounds(bounds, { padding: [40, 40] });
+}
+</script>
+{% endblock %}

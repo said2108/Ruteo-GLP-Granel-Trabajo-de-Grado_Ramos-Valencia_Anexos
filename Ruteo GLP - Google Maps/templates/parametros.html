@@ -1,0 +1,139 @@
+{#
+  © 2026 Valentina Ramos Muñoz y Sofía Valentina Valencia López. Todos los derechos reservados.
+  Universidad del Valle, Ingeniería Industrial, Palmira. Se prohíbe su reproducción, distribución o uso comercial sin autorización de las autoras.
+#}
+{% extends 'base.html' %}
+{% block title %}Parámetros — Ruteo GLP · Google Maps{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="mb-0">Parámetros</h4>
+    <small class="text-muted">Configuración de la planta y costos operativos</small>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('parametros') }}">
+<div class="row g-4">
+
+  <!-- ── Planta ─────────────────────────────────────────────── -->
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header bg-dark text-white d-flex align-items-center gap-2">
+        <i class="bi bi-geo-alt-fill"></i>
+        <span class="fw-semibold">Planta de despacho</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Coordenadas del punto de origen y retorno para todas las rutas.
+        </p>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Ciudad</label>
+          <input type="text" class="form-control"
+                 value="{{ params.planta.ciudad }}" disabled>
+        </div>
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold">Latitud</label>
+            <input type="number" class="form-control"
+                   name="planta_lat"
+                   value="{{ params.planta.lat }}"
+                   step="0.0000001" required>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">Longitud</label>
+            <input type="number" class="form-control"
+                   name="planta_lon"
+                   value="{{ params.planta.lon }}"
+                   step="0.0000001" required>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Combustible ───────────────────────────────────────── -->
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header bg-dark text-white d-flex align-items-center gap-2">
+        <i class="bi bi-fuel-pump-fill"></i>
+        <span class="fw-semibold">Combustible</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Precio del galón de ACPM utilizado para calcular el costo de combustible por km.
+        </p>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Precio por galón (COP)</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" class="form-control"
+                   name="costo_galon"
+                   value="{{ params.costo_galon }}"
+                   min="1000" step="100" required>
+          </div>
+          <div class="form-text">Precio actual del ACPM en Colombia.</div>
+        </div>
+
+        <div class="alert alert-secondary py-2 mb-0 small">
+          <i class="bi bi-info-circle me-1"></i>
+          Costo por km = precio galón × consumo del vehículo (gal/km)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Vehículos (solo lectura) ──────────────────────────── -->
+  {% for v in params.vehiculos %}
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center gap-2
+                  {{ 'bg-primary' if loop.index == 1 else 'bg-warning' }} text-white">
+        <i class="bi bi-truck-front-fill"></i>
+        <span class="fw-semibold">Vehículo {{ v.id }}
+          {{ '— Grande' if loop.index == 1 else '— Pequeño' }}
+        </span>
+        <span class="badge bg-white
+                     {{ 'text-primary' if loop.index == 1 else 'text-warning' }}
+                     ms-auto">Solo lectura</span>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="form-label text-muted small mb-1">Capacidad</label>
+            <div class="fs-5 fw-bold">{{ '{:,}'.format(v.capacidad) }} kg</div>
+          </div>
+          <div class="col-6">
+            <label class="form-label text-muted small mb-1">Consumo</label>
+            <div class="fs-5 fw-bold">{{ v.consumo }} <span class="fs-6 fw-normal text-muted">gal/km</span></div>
+          </div>
+          <div class="col-6">
+            <label class="form-label text-muted small mb-1">Costo peaje</label>
+            <div class="fs-5 fw-bold">${{ '{:,}'.format(v.costo_peaje) }}</div>
+          </div>
+          <div class="col-6">
+            <label class="form-label text-muted small mb-1">Costo/km est.</label>
+            {% set costo_km = (v.consumo * params.costo_galon) | round(0) | int %}
+            <div class="fs-5 fw-bold">${{ '{:,}'.format(costo_km) }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+</div>
+
+<!-- ── Botones ───────────────────────────────────────────────── -->
+<div class="d-flex justify-content-end gap-2 mt-4">
+  <a href="{{ url_for('ruteo_nuevo') }}" class="btn btn-outline-secondary">
+    <i class="bi bi-x-lg me-1"></i>Cancelar
+  </a>
+  <button type="submit" class="btn btn-primary">
+    <i class="bi bi-check-lg me-1"></i>Guardar parámetros
+  </button>
+</div>
+
+</form>
+{% endblock %}

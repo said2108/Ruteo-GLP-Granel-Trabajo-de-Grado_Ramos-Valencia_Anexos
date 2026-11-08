@@ -1,0 +1,810 @@
+{#
+  © 2026 Valentina Ramos Muñoz y Sofía Valentina Valencia López. Todos los derechos reservados.
+  Universidad del Valle, Ingeniería Industrial, Palmira. Se prohíbe su reproducción, distribución o uso comercial sin autorización de las autoras.
+#}
+{% extends 'base.html' %}
+{% block title %}Comparación histórica - Ruteo GLP · Fórmula{% endblock %}
+
+{% block head %}
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    #mapaComparacion { height: 420px; border-radius: .5rem; }
+    .comparison-route-card {
+      border: 1px solid #e5e7eb;
+      border-left: 4px solid var(--route-color);
+      border-radius: .5rem;
+      background: #fff;
+      padding: 1rem;
+    }
+    .route-icon {
+      width: 2.25rem;
+      height: 2.25rem;
+      border-radius: .45rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--route-color);
+      background: color-mix(in srgb, var(--route-color) 12%, white);
+      font-size: 1.2rem;
+      flex: 0 0 auto;
+    }
+    .route-metric {
+      border-radius: .45rem;
+      background: #f8f9fa;
+      padding: .65rem .75rem;
+    }
+    .route-metric .metric-value {
+      font-weight: 700;
+      line-height: 1.1;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      font-size: .88rem;
+    }
+    .route-metric .metric-label {
+      color: #6c757d;
+      font-size: .78rem;
+    }
+    .route-client-list {
+      display: grid;
+      gap: .45rem;
+      margin-top: .9rem;
+    }
+    .route-client-item {
+      display: flex;
+      gap: .55rem;
+      align-items: flex-start;
+      border-top: 1px solid #eef0f2;
+      padding-top: .45rem;
+      font-size: .86rem;
+    }
+    .client-step {
+      width: 1.4rem;
+      height: 1.4rem;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      background: var(--route-color);
+      font-size: .72rem;
+      font-weight: 700;
+      flex: 0 0 auto;
+    }
+    .summary-row-card {
+      border: 1px solid #e5e7eb;
+      border-radius: .5rem;
+      padding: .9rem;
+      background: #fff;
+    }
+    .summary-value-box {
+      border-radius: .45rem;
+      background: #f8f9fa;
+      padding: .65rem .75rem;
+      min-height: 4rem;
+    }
+    .summary-value-box .label {
+      color: #6c757d;
+      font-size: .76rem;
+      margin-bottom: .15rem;
+    }
+    .summary-value-box .value {
+      font-weight: 700;
+      font-size: 1.02rem;
+    }
+    .summary-diff-positive { color: #198754; }
+    .summary-diff-negative { color: #dc3545; }
+
+    /* ── Datepicker ─────────────────────────── */
+    .datepicker-popup {
+      position: absolute; top: 100%; left: 0; z-index: 1060;
+      width: 320px; margin-top: 4px;
+      background: #fff; border: 1px solid #dee2e6;
+      border-radius: .5rem;
+      box-shadow: 0 .5rem 1rem rgba(0,0,0,.15);
+      padding: 1rem;
+    }
+    .datepicker-header {
+      display: flex; align-items: center;
+      justify-content: space-between; margin-bottom: .75rem;
+    }
+    #dpTitle { font-weight: 600; font-size: .95rem; }
+    .dp-nav {
+      background: none; border: none; font-size: 1.3rem;
+      color: #6c757d; cursor: pointer;
+      padding: .15rem .5rem; border-radius: .25rem; line-height: 1;
+    }
+    .dp-nav:hover { background: #f0f0f0; }
+    .dp-nav:disabled { opacity: .25; cursor: default; }
+    .dp-weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      text-align: center; font-size: .72rem;
+      color: #6c757d; font-weight: 600;
+      text-transform: uppercase; margin-bottom: .35rem;
+    }
+    .dp-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 2px;
+    }
+    .dp-day {
+      text-align: center; padding: .4rem 0;
+      font-size: .85rem; border-radius: .3rem;
+      cursor: pointer; transition: background .1s;
+    }
+    .dp-day:hover:not(.dp-empty):not(.dp-disabled) { background: #e9ecef; }
+    .dp-day.dp-available { font-weight: 600; color: #198754; }
+    .dp-day.dp-available:hover { background: #d1e7dd; }
+    .dp-day.dp-selected { background: #198754 !important; color: #fff !important; }
+    .dp-day.dp-disabled { color: #d0d0d0; cursor: default; }
+    .dp-day.dp-empty { cursor: default; }
+    .dp-today { text-decoration: underline; text-underline-offset: 3px; }
+
+    /* ── Resumen comparativo nuevo ──────────── */
+    .metric-card { transition: transform .15s; border: none !important; }
+    .metric-card:hover { transform: translateY(-3px); }
+    .metric-icon {
+      width: 2.5rem; height: 2.5rem;
+      border-radius: .6rem;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.15rem; flex-shrink: 0;
+    }
+    .metric-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+    .comp-bar { height: 8px; border-radius: 4px; background: #e9ecef; overflow: hidden; }
+    .comp-bar-fill { height: 100%; border-radius: 4px; transition: width .5s; }
+    .cap-bar { height: 10px; border-radius: 5px; background: #e9ecef; overflow: hidden; }
+    .cap-bar-fill { height: 100%; border-radius: 5px; }
+    .conclusion-icon {
+      width: 3.5rem; height: 3.5rem;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem; flex-shrink: 0;
+    }
+    .legend-dot {
+      display: inline-block; width: 14px; height: 14px;
+      border-radius: 3px; flex-shrink: 0;
+    }
+  </style>
+{% endblock %}
+
+{% macro dinero(valor) -%}
+  ${{ '{:,.0f}'.format(valor or 0) }}
+{%- endmacro %}
+
+{% macro numero(valor) -%}
+  {{ '{:,.0f}'.format(valor or 0) }}
+{%- endmacro %}
+
+{% macro ruta_card(titulo, resultado, color, scenario) %}
+<div class="card h-100">
+  <div class="card-header bg-{{ color }} {{ 'text-dark' if color == 'warning' else 'text-white' }}">
+    <i class="bi bi-truck me-1"></i>{{ titulo }}
+  </div>
+  <div class="card-body">
+    <div class="row g-2 mb-3 text-center">
+      <div class="col-4">
+        <div class="fw-bold">{{ resultado.rutas | length }}</div>
+        <div class="small text-muted">Vehículos</div>
+      </div>
+      <div class="col-4">
+        <div class="fw-bold">{{ numero(resultado.distancia_km if resultado.distancia_km is defined else resultado.rutas.values() | sum(attribute='distancia_km')) }}</div>
+        <div class="small text-muted">km</div>
+      </div>
+      <div class="col-4">
+        <div class="fw-bold">{{ dinero(resultado.costo_total) }}</div>
+        <div class="small text-muted">Costo</div>
+      </div>
+    </div>
+
+    {% for vid, ruta in resultado.rutas.items() %}
+    {% set vid_int = vid | int %}
+    {% if scenario == 'empirico' %}
+    {% set route_color = '#0d6efd' if vid_int == 1 else '#f97316' %}
+    {% else %}
+    {% set route_color = '#198754' if vid_int == 1 else '#7c3aed' %}
+    {% endif %}
+    {% set v_label = 'Grande' if vid_int == 1 else 'Pequeño' %}
+    {% set clientes = ruta.paradas | length - 2 %}
+    <div class="comparison-route-card mb-3" style="--route-color: {{ route_color }}">
+      <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+        <div class="d-flex align-items-center gap-2">
+          <div class="route-icon">
+            <i class="bi bi-signpost-split-fill"></i>
+          </div>
+          <div>
+            <div class="fw-bold fs-5">Vehículo {{ vid }} — {{ v_label }}</div>
+            <div class="small text-muted">{{ clientes }} cliente(s) asignado(s)</div>
+          </div>
+        </div>
+        <span class="badge text-bg-light">{{ numero(ruta.carga_total) }} kg</span>
+      </div>
+
+      <div class="row g-2">
+        <div class="col-6 col-xl-3">
+          <div class="route-metric">
+            <div class="metric-value">{{ ruta.distancia_km }}</div>
+            <div class="metric-label">km recorridos</div>
+          </div>
+        </div>
+        <div class="col-6 col-xl-3">
+          <div class="route-metric">
+            <div class="metric-value">{{ dinero(ruta.costo_combustible) }}</div>
+            <div class="metric-label">Combustible</div>
+          </div>
+        </div>
+        <div class="col-6 col-xl-3">
+          <div class="route-metric">
+            <div class="metric-value">{{ dinero(ruta.costo_peajes) }}</div>
+            <div class="metric-label">Peajes</div>
+          </div>
+        </div>
+        <div class="col-6 col-xl-3">
+          <div class="route-metric">
+            <div class="metric-value">{{ dinero(ruta.costo_total) }}</div>
+            <div class="metric-label">Total ruta</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="route-client-list">
+        {% for parada in ruta.paradas %}
+          {% if parada.nodo != 'Planta' %}
+          <div class="route-client-item">
+            <span class="client-step">{{ loop.index0 }}</span>
+            <div>
+              <div class="fw-semibold">{{ parada.nombre }}</div>
+              <div class="text-muted">{{ parada.ciudad }} · {{ numero(parada.demanda) }} kg</div>
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endmacro %}
+
+{% macro resumen_valor(fila, valor) -%}
+  {% if fila.tipo == '$' %}
+    {{ dinero(valor) }}
+  {% elif fila.tipo == '%' %}
+    {{ valor }}%
+  {% elif fila.tipo == 'km' %}
+    {{ valor | round(2) }} km
+  {% else %}
+    {{ valor | round(2) }}
+  {% endif %}
+{%- endmacro %}
+
+{% macro resumen_diferencia(fila) -%}
+  {% if fila.tipo == '$' %}
+    {{ dinero(fila.diferencia) }}
+  {% elif fila.tipo == '%' %}
+    {{ fila.diferencia }} pp
+  {% elif fila.tipo == 'km' %}
+    {{ fila.diferencia | round(2) }} km
+  {% else %}
+    {{ fila.diferencia | round(2) }}
+  {% endif %}
+{%- endmacro %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="mb-0">Comparación histórica</h4>
+    <small class="text-muted">Escenario empírico de la empresa vs modelo propuesto de optimización</small>
+  </div>
+</div>
+
+<div class="alert alert-light border mb-4">
+  <i class="bi bi-info-circle-fill text-primary me-2"></i>
+  El escenario empírico fue reconstruido asumiendo el orden de registro como orden de visita,
+  dado que no se dispone del orden real de entregas realizadas por la empresa.
+</div>
+
+<div class="card mb-4 border-start border-4 border-success">
+  <div class="card-body">
+    <form method="get" action="{{ url_for('comparacion') }}" class="row g-3 align-items-end">
+      <div class="col-lg-8">
+        <label class="form-label fw-semibold">Fecha del reporte diario</label>
+        <div class="position-relative" id="fechaWrapper">
+          <div class="input-group">
+            <input class="form-control"
+                   name="fecha"
+                   id="fechaInput"
+                   value="{{ fecha_seleccionada or '' }}"
+                   placeholder="Escribe o selecciona una fecha, ej. 2023-01-02"
+                   autocomplete="off"
+                   required>
+            <button class="btn btn-outline-secondary" type="button" id="calendarToggle" tabindex="-1">
+              <i class="bi bi-calendar3"></i>
+            </button>
+          </div>
+          <div id="datepickerPopup" class="datepicker-popup d-none">
+            <div class="datepicker-header">
+              <button type="button" class="dp-nav" id="prevMonth">&lsaquo;</button>
+              <span id="dpTitle"></span>
+              <button type="button" class="dp-nav" id="nextMonth">&rsaquo;</button>
+            </div>
+            <div class="dp-weekdays">
+              <span>Dom</span><span>Lun</span><span>Mar</span><span>Mi&eacute;</span><span>Jue</span><span>Vie</span><span>S&aacute;b</span>
+            </div>
+            <div id="dpGrid" class="dp-grid"></div>
+          </div>
+        </div>
+        <div class="form-text">Puedes escribir la fecha en formato AAAA-MM-DD o elegirla del calendario.</div>
+      </div>
+      <div class="col-lg-4 d-grid">
+        <button class="btn btn-success">
+          <i class="bi bi-search me-1"></i>Cargar escenario
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if fecha_seleccionada %}
+<div class="card mb-4">
+  <div class="card-header bg-white d-flex justify-content-between align-items-center">
+    <span class="fw-semibold"><i class="bi bi-calendar-check me-2"></i>Pedidos del día seleccionado</span>
+    <form method="get" action="{{ url_for('comparacion') }}">
+      <input type="hidden" name="fecha" value="{{ fecha_seleccionada }}">
+      <input type="hidden" name="comparar" value="1">
+      <button class="btn btn-optimizar btn-sm">
+        <i class="bi bi-bar-chart-line me-1"></i>Ver comparación
+      </button>
+    </form>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>#</th>
+          <th>Código</th>
+          <th>Cliente</th>
+          <th>Municipio</th>
+          <th class="text-end">Demanda kg entregados</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pedidos_historicos %}
+        <tr>
+          <td class="text-muted">{{ loop.index }}</td>
+          <td><span class="badge bg-secondary">{{ p.id_cliente }}</span></td>
+          <td class="fw-semibold">{{ p.nombre }}</td>
+          <td>{{ p.ciudad }}</td>
+          <td class="text-end">{{ numero(p.demanda) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot class="table-light">
+        <tr>
+          <td colspan="4" class="text-end fw-semibold">Total:</td>
+          <td class="text-end fw-bold">{{ numero(pedidos_historicos | sum(attribute='demanda')) }} kg</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if comparativo %}
+{% if comparativo.optimizado.estado != 'Optimal' %}
+<div class="alert alert-warning">
+  El modelo no encontró solución óptima para esta fecha. Estado: {{ comparativo.optimizado.estado }}.
+</div>
+{% else %}
+<div class="row g-4 mb-4">
+  <div class="col-lg-6">
+    {{ ruta_card('Escenario empírico reconstruido', comparativo.empirico, 'dark', 'empirico') }}
+  </div>
+  <div class="col-lg-6">
+    {{ ruta_card('Modelo propuesto optimizado', comparativo.optimizado, 'success', 'optimizado') }}
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header bg-white d-flex align-items-center gap-3">
+    <span class="fw-semibold"><i class="bi bi-map me-2"></i>Mapa comparativo</span>
+    <div class="ms-auto d-flex flex-wrap gap-3">
+      <span class="small">
+        <span class="legend-line" style="background:#0d6efd"></span>Histórico V1
+      </span>
+      <span class="small">
+        <span class="legend-line" style="background:#f97316"></span>Histórico V2
+      </span>
+      <span class="small">
+        <span class="legend-line" style="background:#198754"></span>Optimizado V1
+      </span>
+      <span class="small">
+        <span class="legend-line" style="background:#7c3aed"></span>Optimizado V2
+      </span>
+      <span class="small text-muted">Entrecortada: empírico · Continua: optimizado</span>
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="toggleEmpirico" checked>
+        <label class="form-check-label small" for="toggleEmpirico">Ver empírico</label>
+      </div>
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="toggleOptimizado" checked>
+        <label class="form-check-label small" for="toggleOptimizado">Ver optimizado</label>
+      </div>
+    </div>
+  </div>
+  <div class="card-body p-2">
+    <div id="mapaComparacion"></div>
+  </div>
+</div>
+
+<div class="alert {{ 'alert-success' if comparativo.ahorro.valor >= 0 else 'alert-warning' }} mb-4">
+  <i class="bi bi-cash-stack me-2"></i>
+  {% if comparativo.ahorro.valor >= 0 %}
+    Ahorro estimado con el modelo: <strong>{{ dinero(comparativo.ahorro.valor) }}</strong>
+    ({{ comparativo.ahorro.porcentaje }}% menos frente al escenario empírico).
+  {% else %}
+    Para esta fecha, el modelo aumenta el costo estimado en
+    <strong>{{ dinero(-comparativo.ahorro.valor) }}</strong>. Revisa capacidades, peajes y supuestos.
+  {% endif %}
+</div>
+
+
+
+{% set metric_icons = ['bi-geo-alt-fill', 'bi-fuel-pump-fill', 'bi-sign-stop-fill', 'bi-cash-stack'] %}
+{% set metric_titles = ['Distancia Total', 'Costo Combustible', 'Costo Peajes', 'Costo Total'] %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+  <div>
+    <h4 class="fw-bold mb-0">Resumen comparativo</h4>
+    <small class="text-muted">Comparaci&oacute;n detallada entre el escenario emp&iacute;rico y el modelo optimizado</small>
+  </div>
+  <div class="d-flex gap-3 flex-wrap">
+    <span class="d-flex align-items-center gap-1 small fw-semibold">
+      <span class="legend-dot" style="background:#0d6efd"></span>
+      Actual (Emp&iacute;rico)
+    </span>
+    <span class="d-flex align-items-center gap-1 small fw-semibold">
+      <span class="legend-dot" style="background:#198754"></span>
+      Optimizado
+    </span>
+    <span class="d-flex align-items-center gap-1 small fw-semibold">
+      <span class="legend-dot" style="background:#7c3aed"></span>
+      Impacto
+    </span>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  {% for i in [0,1,2,3] %}
+  {% set fila = comparativo.resumen[i] %}
+  {% set pct_impacto = (fila.diferencia / fila.empirico * 100) if fila.empirico and fila.diferencia > 0 else 0 %}
+  {% set opt_pct = (fila.optimizado / fila.empirico * 100) if fila.empirico else 0 %}
+  <div class="col-md-6 col-xl-3">
+    <div class="card h-100 metric-card shadow-sm">
+      <div class="card-body p-3">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <div class="metric-icon bg-primary bg-opacity-10 text-primary">
+            <i class="bi {{ metric_icons[i] }}"></i>
+          </div>
+          <span class="small fw-semibold text-muted text-uppercase">{{ metric_titles[i] }}</span>
+        </div>
+        {% if pct_impacto > 0 %}
+        <div class="d-flex align-items-baseline gap-1 mb-3">
+          <span class="metric-value" style="color:#7c3aed">-{{ pct_impacto | round(1) }}%</span>
+          <i class="bi bi-arrow-down" style="color:#7c3aed;font-size:.85rem"></i>
+        </div>
+        {% endif %}
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small mb-1">
+            <span class="text-muted">Actual</span>
+            <span class="fw-semibold" style="color:#0d6efd">{{ resumen_valor(fila, fila.empirico) }}</span>
+          </div>
+          <div class="comp-bar">
+            <div class="comp-bar-fill" style="width:100%;background:#0d6efd"></div>
+          </div>
+        </div>
+        <div>
+          <div class="d-flex justify-content-between small mb-1">
+            <span class="text-muted">Optimizado</span>
+            <span class="fw-semibold" style="color:#198754">{{ resumen_valor(fila, fila.optimizado) }}</span>
+          </div>
+          <div class="comp-bar">
+            <div class="comp-bar-fill" style="width:{{ [opt_pct, 100] | min | round(0) | int }}%;background:#198754"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="row g-3 mb-4">
+  {% for v_id in [1,2] %}
+  {% set v_label = 'Grande' if v_id == 1 else 'Pequeño' %}
+  {% set v_cap = capacidades.get(v_id, 0) %}
+  {% set emp_ruta = comparativo.empirico.rutas.get(v_id) %}
+  {% set opt_ruta = comparativo.optimizado.rutas.get(v_id) %}
+  {% set emp_carga = emp_ruta.carga_total if emp_ruta else 0 %}
+  {% set opt_carga = opt_ruta.carga_total if opt_ruta else 0 %}
+  {% set emp_pct = (emp_carga / v_cap * 100) | round | int if v_cap and emp_carga else 0 %}
+  {% set opt_pct = (opt_carga / v_cap * 100) | round | int if v_cap and opt_carga else 0 %}
+  {% set dif_pct = emp_pct - opt_pct %}
+  <div class="col-md-6">
+    <div class="card h-100 border-0 shadow-sm">
+      <div class="card-body p-3">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <div class="metric-icon {{ 'bg-primary bg-opacity-10 text-primary' if v_id == 1 else 'bg-warning bg-opacity-10 text-warning' }}">
+            <i class="bi bi-truck-front-fill"></i>
+          </div>
+          <div>
+            <span class="fw-semibold">Veh&iacute;culo {{ v_id }} &mdash; {{ v_label }}</span>
+            <div class="small text-muted">{{ v_cap | int }} kg de capacidad</div>
+          </div>
+        </div>
+
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small mb-1">
+            <span style="color:#0d6efd" class="fw-semibold">Actual</span>
+            <span style="color:#0d6efd" class="fw-semibold">{{ emp_pct }}%</span>
+          </div>
+          <div class="cap-bar">
+            <div class="cap-bar-fill" style="width:{{ emp_pct | int }}%;background:#0d6efd"></div>
+          </div>
+        </div>
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small mb-1">
+            <span style="color:#198754" class="fw-semibold">Optimizado</span>
+            <span style="color:#198754" class="fw-semibold">{{ opt_pct }}%</span>
+          </div>
+          <div class="cap-bar">
+            <div class="cap-bar-fill" style="width:{{ opt_pct | int }}%;background:#198754"></div>
+          </div>
+        </div>
+
+
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card border-success">
+  <div class="card-body p-4">
+    <div class="d-flex align-items-start gap-3">
+      <div class="conclusion-icon bg-success bg-opacity-10 text-success">
+        <i class="bi bi-check-circle-fill"></i>
+      </div>
+      <div>
+        <h5 class="fw-bold mb-1" style="color:#198754">Conclusi&oacute;n</h5>
+        <ul class="mb-0 ps-3">
+          <li class="mb-1">Se logr&oacute; un ahorro del <strong>{{ comparativo.ahorro.porcentaje }}%</strong> en costos totales, reduciendo de <strong>{{ dinero(comparativo.empirico.costo_total) }}</strong> a <strong>{{ dinero(comparativo.optimizado.costo_total) }}</strong>.</li>
+          <li class="mb-1">La distancia total se redujo de <strong>{{ numero(comparativo.empirico.distancia_km) }} km</strong> a <strong>{{ numero(comparativo.optimizado.distancia_km) }} km</strong>.</li>
+          <li>Se optimiz&oacute; la asignaci&oacute;n de pedidos entre los veh&iacute;culos disponibles, mejorando la eficiencia operativa y reduciendo costos de combustible y peajes.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endif %}
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+
+<!-- ── Datepicker ────────────────────────────────────────────────── -->
+<script>
+const FECHAS_DISPONIBLES = {{ fechas_json | safe }};
+const fechasSet = new Set(FECHAS_DISPONIBLES.map(function(f) { return f.valor; }));
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+var dp = {
+  year: 2023,
+  month: 0,
+  selected: '{{ fecha_seleccionada or "" }}'
+};
+
+var dpInput = document.getElementById('fechaInput');
+var dpPopup = document.getElementById('datepickerPopup');
+var dpToggle = document.getElementById('calendarToggle');
+var dpTitle = document.getElementById('dpTitle');
+var dpGrid = document.getElementById('dpGrid');
+var dpPrev = document.getElementById('prevMonth');
+var dpNext = document.getElementById('nextMonth');
+
+function dpRender() {
+  var y = dp.year, m = dp.month;
+  dpTitle.textContent = MESES[m] + ' ' + y;
+
+  var firstDay = new Date(y, m, 1).getDay();
+  var daysInMonth = new Date(y, m + 1, 0).getDate();
+  var hoy = new Date();
+  var hoyStr = hoy.getFullYear() + '-' + String(hoy.getMonth()+1).padStart(2,'0') + '-' + String(hoy.getDate()).padStart(2,'0');
+
+  var html = '';
+  for (var i = 0; i < firstDay; i++) {
+    html += '<div class="dp-day dp-empty"></div>';
+  }
+  for (var d = 1; d <= daysInMonth; d++) {
+    var dateStr = y + '-' + String(m+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    var classes = ['dp-day'];
+    if (fechasSet.has(dateStr)) {
+      classes.push('dp-available');
+    } else {
+      classes.push('dp-disabled');
+    }
+    if (dateStr === dp.selected) {
+      classes.push('dp-selected');
+    }
+    if (dateStr === hoyStr) {
+      classes.push('dp-today');
+    }
+    html += '<div class="' + classes.join(' ') + '" data-date="' + dateStr + '">' + d + '</div>';
+  }
+  dpGrid.innerHTML = html;
+
+  dpPrev.disabled = (y === 2023 && m === 0);
+  dpNext.disabled = (y === 2024 && m === 11);
+
+  dpGrid.querySelectorAll('.dp-day.dp-available').forEach(function(el) {
+    el.addEventListener('click', function() {
+      dp.selected = el.dataset.date;
+      dpInput.value = el.dataset.date;
+      dpPopup.classList.add('d-none');
+      dpRender();
+    });
+  });
+}
+
+function dpOpen() {
+  var val = dpInput.value;
+  if (val) {
+    var parts = val.split('-');
+    if (parts.length === 3) {
+      var py = parseInt(parts[0], 10);
+      var pm = parseInt(parts[1], 10) - 1;
+      if (py >= 2023 && py <= 2024 && pm >= 0 && pm <= 11) {
+        dp.year = py;
+        dp.month = pm;
+        dp.selected = val;
+      }
+    }
+  }
+  dpRender();
+  dpPopup.classList.remove('d-none');
+}
+
+function dpClose() {
+  dpPopup.classList.add('d-none');
+}
+
+function dpToggleFn(e) {
+  e.stopPropagation();
+  if (dpPopup.classList.contains('d-none')) {
+    dpOpen();
+  } else {
+    dpClose();
+  }
+}
+
+dpToggle.addEventListener('click', dpToggleFn);
+dpInput.addEventListener('click', dpToggleFn);
+
+dpPrev.addEventListener('click', function() {
+  if (dp.month === 0) { dp.year--; dp.month = 11; }
+  else { dp.month--; }
+  dpRender();
+});
+
+dpNext.addEventListener('click', function() {
+  if (dp.month === 11) { dp.year++; dp.month = 0; }
+  else { dp.month++; }
+  dpRender();
+});
+
+document.addEventListener('click', function(e) {
+  if (dpPopup.classList.contains('d-none')) return;
+  var wrapper = document.getElementById('fechaWrapper');
+  if (wrapper && !wrapper.contains(e.target)) {
+    dpClose();
+  }
+});
+</script>
+
+{% if comparativo and comparativo.optimizado.estado == 'Optimal' %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const EMPIRICO = {{ comparativo.empirico.rutas | tojson }};
+const OPTIMIZADO = {{ comparativo.optimizado.rutas | tojson }};
+const mapComp = L.map('mapaComparacion');
+const boundsComp = [];
+const empiricoLayer = L.layerGroup().addTo(mapComp);
+const optimizadoLayer = L.layerGroup().addTo(mapComp);
+const COLORES_EMPIRICO = {
+  "1": "#0d6efd",
+  "2": "#f97316",
+};
+const COLORES_OPTIMIZADO = {
+  "1": "#198754",
+  "2": "#7c3aed",
+};
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap',
+  maxZoom: 18,
+}).addTo(mapComp);
+
+function drawScenario(rutas, dashArray, label, group, colores) {
+  for (const [vid, ruta] of Object.entries(rutas)) {
+    const color = colores[vid] ?? '#6c757d';
+    const latlngs = ruta.paradas.map(p => [p.lat, p.lon]);
+    latlngs.forEach(p => boundsComp.push(p));
+
+    L.polyline(latlngs, {
+      color,
+      weight: 4.5,
+      opacity: 0.88,
+      dashArray,
+    }).bindPopup(`${label} - Vehículo ${vid}`).addTo(group);
+
+    ruta.paradas.forEach((p, i) => {
+      if (p.nodo === 'Planta' && i > 0) return;
+      L.circleMarker([p.lat, p.lon], {
+        radius: p.nodo === 'Planta' ? 8 : 6,
+        color: '#fff',
+        weight: 2,
+        fillColor: p.nodo === 'Planta' ? '#dc3545' : color,
+        fillOpacity: 0.9,
+      }).bindPopup(`
+        <strong>${p.nombre}</strong><br>
+        ${p.ciudad}<br>
+        ${label} · Vehículo ${vid}<br>
+        Paso ${i}
+      `).addTo(group);
+
+      if (p.nodo !== 'Planta') {
+        L.marker([p.lat, p.lon], {
+          icon: L.divIcon({
+            html: `<span style="
+              background:${color};color:#fff;border-radius:50%;
+              width:20px;height:20px;display:flex;align-items:center;
+              justify-content:center;font-size:11px;font-weight:700;
+              border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)">${i}</span>`,
+            className: '',
+            iconAnchor: [10, 10],
+          }),
+          interactive: false,
+          zIndexOffset: 600,
+        }).addTo(group);
+      }
+    });
+  }
+}
+
+function setLayerVisible(group, visible) {
+  if (visible && !mapComp.hasLayer(group)) {
+    group.addTo(mapComp);
+  }
+  if (!visible && mapComp.hasLayer(group)) {
+    mapComp.removeLayer(group);
+  }
+}
+
+drawScenario(EMPIRICO, '9 7', 'Empírico', empiricoLayer, COLORES_EMPIRICO);
+drawScenario(OPTIMIZADO, null, 'Optimizado', optimizadoLayer, COLORES_OPTIMIZADO);
+
+document.getElementById('toggleEmpirico').addEventListener('change', event => {
+  setLayerVisible(empiricoLayer, event.target.checked);
+});
+
+document.getElementById('toggleOptimizado').addEventListener('change', event => {
+  setLayerVisible(optimizadoLayer, event.target.checked);
+});
+
+if (boundsComp.length > 0) {
+  mapComp.fitBounds(boundsComp, { padding: [35, 35] });
+}
+</script>
+{% endif %}
+{% endblock %}

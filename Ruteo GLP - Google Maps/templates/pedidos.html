@@ -1,0 +1,449 @@
+{#
+  © 2026 Valentina Ramos Muñoz y Sofía Valentina Valencia López. Todos los derechos reservados.
+  Universidad del Valle, Ingeniería Industrial, Palmira. Se prohíbe su reproducción, distribución o uso comercial sin autorización de las autoras.
+#}
+{% extends 'base.html' %}
+{% block title %}Pedidos — Ruteo GLP · Google Maps{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h4 class="mb-0">Pedidos del día</h4>
+    <small class="text-muted">{{ pedidos | length }} pedido(s) &nbsp;·&nbsp;
+      {{ pedidos | sum(attribute='demanda') | int }} kg totales</small>
+  </div>
+  <div class="d-flex gap-2">
+    <form method="post" action="{{ url_for('pedidos_resetear') }}"
+          onsubmit="return confirm('¿Restaurar los pedidos originales? Se perderán los cambios.')">
+      <button class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-counterclockwise me-1"></i>Resetear
+      </button>
+    </form>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAgregar">
+      <i class="bi bi-plus-lg me-1"></i>Agregar pedido
+    </button>
+  </div>
+</div>
+
+<div class="card mb-4 border-start border-4 border-{{ estado_capacidad }}">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+      <div>
+        <div class="fw-semibold">
+          <i class="bi bi-box-seam me-1"></i>Capacidad disponible de la flota
+        </div>
+        <div class="text-muted small">
+          {{ '{:,}'.format(demanda_total).replace(',', '.') }} kg de {{ '{:,}'.format(capacidad_total).replace(',', '.') }} kg usados ·
+          {{ '{:,}'.format(capacidad_disponible).replace(',', '.') }} kg disponibles
+        </div>
+      </div>
+      <span class="badge text-bg-{{ estado_capacidad }}">{{ porcentaje_capacidad }}%</span>
+    </div>
+    <div class="progress" role="progressbar" aria-valuenow="{{ porcentaje_capacidad }}" aria-valuemin="0" aria-valuemax="100">
+      <div class="progress-bar bg-{{ estado_capacidad }}"
+           style="width: {{ [porcentaje_capacidad, 100] | min }}%"></div>
+    </div>
+    {% if porcentaje_capacidad >= 95 %}
+      <div class="small text-danger mt-2">La flota está casi al límite. No agregues pedidos que superen la capacidad total.</div>
+    {% elif porcentaje_capacidad >= 80 %}
+      <div class="small text-warning mt-2">La flota ya supera el 80% de uso. Revisa la capacidad antes de agregar más pedidos.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── Tabla de pedidos ─────────────────────────────────────── -->
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-dark">
+        <tr>
+          <th style="width:2rem">#</th>
+          <th>Nombre</th>
+          <th>ID</th>
+          <th>Ciudad</th>
+          <th class="text-end">Demanda (kg)</th>
+          <th class="text-center" style="width:6rem">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pedidos %}
+        <tr>
+          <td class="text-muted">{{ loop.index }}</td>
+          <td class="fw-semibold">{{ p.nombre }}</td>
+          <td><span class="badge bg-secondary">{{ p.id_cliente }}</span></td>
+          <td>{{ p.ciudad }}</td>
+          <td class="text-end">{{ p.demanda }}</td>
+          <td class="text-center">
+            <button class="btn btn-outline-primary btn-sm py-0 px-1"
+                    title="Editar"
+                    data-bs-toggle="modal"
+                    data-bs-target="#modalEditar{{ loop.index0 }}">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <form method="post"
+                  action="{{ url_for('pedidos_eliminar', idx=loop.index0) }}"
+                  class="d-inline"
+                  onsubmit="return confirm('¿Eliminar «{{ p.nombre }}»?')">
+              <button class="btn btn-outline-danger btn-sm py-0 px-1" title="Eliminar">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+
+        {% if not pedidos %}
+        <tr>
+          <td colspan="6" class="text-center text-muted py-4">
+            No hay pedidos. Agrega uno con el botón superior.
+          </td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Modales de edición (uno por pedido) ─────────────────── -->
+{% for p in pedidos %}
+<div class="modal fade" id="modalEditar{{ loop.index0 }}" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('pedidos_editar', idx=loop.index0) }}">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>Editar pedido</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+
+          <!-- Buscador con autocompletado -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Buscar cliente (nombre o ID)</label>
+            <div class="position-relative">
+              <input type="text"
+                     class="form-control ac-input"
+                     data-target="edit{{ loop.index0 }}"
+                     value="{{ p.nombre }} — {{ p.id_cliente }}"
+                     placeholder="Escribe nombre o ID…"
+                     autocomplete="off">
+              <div class="ac-dropdown list-group position-absolute w-100 shadow-sm d-none"
+                   id="drop-edit{{ loop.index0 }}"
+                   style="z-index:1055;max-height:220px;overflow-y:auto"></div>
+            </div>
+            <small class="text-muted">Al seleccionar un cliente se actualizan los campos ocultos.</small>
+          </div>
+
+          <!-- Campos que se rellenan al seleccionar -->
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Nombre</label>
+              <input type="text" class="form-control ac-nombre" id="nombre-edit{{ loop.index0 }}"
+                     name="nombre" value="{{ p.nombre }}" readonly>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">ID Cliente</label>
+              <input type="text" class="form-control ac-id" id="id-edit{{ loop.index0 }}"
+                     name="id_cliente" value="{{ p.id_cliente }}" readonly>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Ciudad</label>
+              <input type="text" class="form-control ac-ciudad" id="ciudad-edit{{ loop.index0 }}"
+                     name="ciudad" value="{{ p.ciudad }}" readonly>
+            </div>
+          </div>
+          <div class="row mb-2">
+            <div class="col-md-3">
+              <label class="form-label">Latitud</label>
+              <input type="text" class="form-control ac-lat" id="lat-edit{{ loop.index0 }}"
+                     name="lat" value="{{ p.lat }}" readonly>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Longitud</label>
+              <input type="text" class="form-control ac-lon" id="lon-edit{{ loop.index0 }}"
+                     name="lon" value="{{ p.lon }}" readonly>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold text-primary">Demanda (kg)</label>
+              <input type="number" class="form-control fw-semibold"
+                     name="demanda" value="{{ p.demanda }}" min="1" required>
+            </div>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg me-1"></i>Guardar cambios
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+<!-- ── Modal agregar pedido ────────────────────────────────── -->
+<div class="modal fade" id="modalAgregar" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('pedidos_agregar') }}" id="formAgregar">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Agregar pedido</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+
+          <!-- Buscador con autocompletado -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Buscar cliente (nombre o ID)</label>
+            <div class="position-relative">
+              <input type="text"
+                     class="form-control ac-input"
+                     data-target="new"
+                     id="buscar-new"
+                     placeholder="Escribe nombre o ID…"
+                     autocomplete="off">
+              <div class="ac-dropdown list-group position-absolute w-100 shadow-sm d-none"
+                   id="drop-new"
+                   style="z-index:1055;max-height:220px;overflow-y:auto"></div>
+            </div>
+          </div>
+
+          <!-- Campos rellenados por autocompletado -->
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Nombre</label>
+              <input type="text" class="form-control ac-nombre" id="nombre-new"
+                     name="nombre" readonly placeholder="Se completa al seleccionar">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">ID Cliente</label>
+              <input type="text" class="form-control ac-id" id="id-new"
+                     name="id_cliente" readonly>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Ciudad</label>
+              <input type="text" class="form-control ac-ciudad" id="ciudad-new"
+                     name="ciudad" readonly>
+            </div>
+          </div>
+          <div class="row mb-2">
+            <div class="col-md-3">
+              <label class="form-label">Latitud</label>
+              <input type="text" class="form-control ac-lat" id="lat-new" name="lat" readonly>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Longitud</label>
+              <input type="text" class="form-control ac-lon" id="lon-new" name="lon" readonly>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold text-primary">Demanda (kg) <span class="text-danger">*</span></label>
+              <input type="number" class="form-control fw-semibold"
+                     name="demanda" id="demanda-new" min="1" required
+                     placeholder="Ej: 500">
+            </div>
+          </div>
+
+          <div id="alerta-seleccionar" class="alert alert-warning py-2 d-none">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            Selecciona un cliente del buscador antes de guardar.
+          </div>
+          <div id="alerta-duplicado" class="alert alert-danger py-2 d-none">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            Este cliente ya fue agregado a los pedidos del día y no puede agregarse de nuevo.
+          </div>
+          <div id="alerta-demanda-max" class="alert alert-danger py-2 d-none">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            Este pedido no puede agregarse. La demanda de <strong id="demanda-max-valor">0</strong> kg supera la capacidad máxima de cualquier vehículo disponible en la flota (10.500 kg máximo).
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btnAgregar" disabled>
+            <i class="bi bi-plus-lg me-1"></i>Agregar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+// ── Catálogo de clientes para autocompletado ──────────────────
+const CATALOGO = {{ catalogo_json | safe }};
+const IDS_PEDIDOS_ACTUALES = new Set({{ pedidos | map(attribute='id_cliente') | list | tojson }});
+
+function normalizarBusqueda(texto) {
+  return (texto || '')
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+// ── Función de filtro ─────────────────────────────────────────
+function filtrar(query) {
+  const q = normalizarBusqueda(query);
+  if (q.length < 2) return [];
+  return CATALOGO.filter(c =>
+    normalizarBusqueda(c.nombre).includes(q) || c.id.includes(q)
+  ).slice(0, 10);
+}
+
+// ── Renderiza el dropdown ─────────────────────────────────────
+function renderDropdown(results, dropEl, onSelect) {
+  if (results.length === 0) {
+    dropEl.innerHTML = '<div class="list-group-item text-muted small">Sin resultados</div>';
+    dropEl.classList.remove('d-none');
+    return;
+  }
+  dropEl.innerHTML = results.map(c => `
+    <button type="button"
+            class="list-group-item list-group-item-action py-2 px-3"
+            data-id="${c.id}"
+            data-nombre="${c.nombre}"
+            data-ciudad="${c.ciudad}"
+            data-lat="${c.lat}"
+            data-lon="${c.lon}">
+      <span class="fw-semibold">${c.nombre}</span>
+      <span class="badge bg-secondary ms-2">${c.id}</span>
+      <span class="text-muted ms-2 small">${c.ciudad}</span>
+    </button>
+  `).join('');
+  dropEl.classList.remove('d-none');
+
+  dropEl.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('mousedown', e => {
+      e.preventDefault();          // evita que el input pierda foco antes del click
+      onSelect({
+        id:     btn.dataset.id,
+        nombre: btn.dataset.nombre,
+        ciudad: btn.dataset.ciudad,
+        lat:    btn.dataset.lat,
+        lon:    btn.dataset.lon,
+      });
+      dropEl.classList.add('d-none');
+    });
+  });
+}
+
+// ── Inicializa autocompletado para un contexto (target) ───────
+function initAC(inputEl, dropEl, fillFields, onSelected) {
+  inputEl.addEventListener('input', () => {
+    const results = filtrar(inputEl.value);
+    renderDropdown(results, dropEl, cliente => {
+      fillFields(cliente);
+      inputEl.value = cliente.nombre + ' — ' + cliente.id;
+      if (onSelected) onSelected(cliente);
+    });
+  });
+
+  inputEl.addEventListener('blur', () => {
+    // Pequeño delay para que el mousedown del dropdown se procese primero
+    setTimeout(() => dropEl.classList.add('d-none'), 150);
+  });
+
+  inputEl.addEventListener('focus', () => {
+    if (inputEl.value.length >= 2) {
+      const results = filtrar(inputEl.value);
+      renderDropdown(results, dropEl, cliente => {
+        fillFields(cliente);
+        inputEl.value = cliente.nombre + ' — ' + cliente.id;
+        if (onSelected) onSelected(cliente);
+      });
+    }
+  });
+}
+
+// ── Configurar modal AGREGAR ──────────────────────────────────
+(function () {
+  const CAPACIDAD_MAX_VEHICULO = 10500;
+  const inputEl  = document.getElementById('buscar-new');
+  const dropEl   = document.getElementById('drop-new');
+  const btnAdd   = document.getElementById('btnAgregar');
+  const alerta   = document.getElementById('alerta-seleccionar');
+  const alertaDuplicado = document.getElementById('alerta-duplicado');
+  const alertaDemandaMax = document.getElementById('alerta-demanda-max');
+
+  function fill(c) {
+    document.getElementById('nombre-new').value = c.nombre;
+    document.getElementById('id-new').value     = c.id;
+    document.getElementById('ciudad-new').value = c.ciudad;
+    document.getElementById('lat-new').value    = c.lat;
+    document.getElementById('lon-new').value    = c.lon;
+    btnAdd.disabled = false;
+    alerta.classList.add('d-none');
+    alertaDuplicado.classList.add('d-none');
+    alertaDemandaMax.classList.add('d-none');
+  }
+
+  initAC(inputEl, dropEl, fill, () => {});
+
+  // Resetear modal al cerrar
+  document.getElementById('modalAgregar').addEventListener('hidden.bs.modal', () => {
+    document.getElementById('formAgregar').reset();
+    dropEl.classList.add('d-none');
+    alerta.classList.add('d-none');
+    alertaDuplicado.classList.add('d-none');
+    alertaDemandaMax.classList.add('d-none');
+    btnAdd.disabled = true;
+  });
+
+  // Validar antes de submit
+  document.getElementById('formAgregar').addEventListener('submit', e => {
+    const idSeleccionado = document.getElementById('id-new').value;
+    if (!idSeleccionado) {
+      e.preventDefault();
+      alerta.classList.remove('d-none');
+      alertaDuplicado.classList.add('d-none');
+      alertaDemandaMax.classList.add('d-none');
+      return;
+    }
+
+    if (IDS_PEDIDOS_ACTUALES.has(idSeleccionado)) {
+      e.preventDefault();
+      alerta.classList.add('d-none');
+      alertaDuplicado.classList.remove('d-none');
+      alertaDemandaMax.classList.add('d-none');
+      inputEl.focus();
+      return;
+    }
+
+    const demanda = parseFloat(document.getElementById('demanda-new').value);
+    if (!isNaN(demanda) && demanda > CAPACIDAD_MAX_VEHICULO) {
+      e.preventDefault();
+      alerta.classList.add('d-none');
+      alertaDuplicado.classList.add('d-none');
+      document.getElementById('demanda-max-valor').textContent = demanda;
+      alertaDemandaMax.classList.remove('d-none');
+    }
+  });
+})();
+
+// ── Configurar modales EDITAR ─────────────────────────────────
+{% for p in pedidos %}
+(function () {
+  const suffix  = 'edit{{ loop.index0 }}';
+  const inputEl = document.querySelector(`[data-target="${suffix}"]`);
+  const dropEl  = document.getElementById('drop-' + suffix);
+
+  function fill(c) {
+    document.getElementById('nombre-'  + suffix).value = c.nombre;
+    document.getElementById('id-'      + suffix).value = c.id;
+    document.getElementById('ciudad-'  + suffix).value = c.ciudad;
+    document.getElementById('lat-'     + suffix).value = c.lat;
+    document.getElementById('lon-'     + suffix).value = c.lon;
+  }
+
+  initAC(inputEl, dropEl, fill, () => {});
+})();
+{% endfor %}
+</script>
+{% endblock %}

@@ -1,0 +1,70 @@
+{#
+  © 2026 Valentina Ramos Muñoz y Sofía Valentina Valencia López. Todos los derechos reservados.
+  Universidad del Valle, Ingeniería Industrial, Palmira. Se prohíbe su reproducción, distribución o uso comercial sin autorización de las autoras.
+#}
+{% extends 'base.html' %}
+{% block title %}Inicio - Ruteo GLP · Google Maps{% endblock %}
+
+{% block content %}
+
+<div class="text-center mb-4">
+  <h3 class="mb-2">Sistema de ruteo GLP a granel</h3>
+  <p class="text-muted mb-0">Selecciona el tipo de análisis que quieres realizar.</p>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card h-100 mode-card border-start border-4 border-success">
+      <div class="card-body p-4 d-flex flex-column">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="mode-icon text-success bg-success-subtle">
+            <i class="bi bi-bar-chart-line"></i>
+          </div>
+          <div>
+            <h4 class="mb-1">Comparación histórica</h4>
+            <div class="text-muted small">Empresa vs modelo propuesto</div>
+          </div>
+        </div>
+
+        <p class="text-muted mb-4">
+          Usa un día real del reporte diario para comparar cómo se programó la operación
+          de forma empírica versus cómo quedaría optimizada por el modelo. El usuario
+          escoge una fecha, los clientes y la demanda salen automáticamente del Excel
+          histórico, y se comparan costos, cargas y rutas.
+        </p>
+
+        <a href="{{ url_for('comparacion') }}" class="btn btn-success mt-auto">
+          <i class="bi bi-arrow-right-circle me-1"></i>Ver comparación
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card h-100 mode-card border-start border-4 border-primary">
+      <div class="card-body p-4 d-flex flex-column">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="mode-icon text-primary bg-primary-subtle">
+            <i class="bi bi-truck"></i>
+          </div>
+          <div>
+            <h4 class="mb-1">Nueva ruta</h4>
+            <div class="text-muted small">Escenario personalizado</div>
+          </div>
+        </div>
+
+        <p class="text-muted mb-4">
+          Construye un escenario operativo nuevo. El usuario selecciona clientes desde
+          el catálogo, ingresa la demanda manualmente, puede editar o eliminar pedidos,
+          y el modelo genera las rutas recomendadas.
+        </p>
+
+        <a href="{{ url_for('ruteo_nuevo') }}" class="btn btn-primary mt-auto">
+          <i class="bi bi-arrow-right-circle me-1"></i>Crear nueva ruta
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
